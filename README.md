@@ -1,8 +1,12 @@
-# cleanmymac
+# cleanmymac & cleanmypc
 
-> Claude Code skill for **negotiated, case-by-case macOS disk cleanup**.
+> Claude Code skills for **negotiated, case-by-case disk cleanup** on macOS and Windows.
 
-Inspired by DaisyDisk + CleanMyMac, but with situational intelligence — Claude reads your actual disk usage and proposes deletions case-by-case instead of running a generic cleanup list. You stay in control of every `rm`.
+Inspired by DaisyDisk + CleanMyMac (macOS) and CCleaner + WizTree (Windows), but with situational intelligence — Claude reads your actual disk usage and proposes deletions case-by-case instead of running a generic cleanup list. You stay in control of every `rm` / `Remove-Item`.
+
+**Two flavors, same philosophy:**
+- 🍎 **`/cleanmymac`** — macOS (Bash, `du`, `df`, `tmutil`)
+- 🪟 **`/cleanmypc`** — Windows (PowerShell, `Get-PSDrive`, DISM, `vssadmin`)
 
 ## Why this exists
 
@@ -24,31 +28,45 @@ Real-time progress bar for deletions > 5 GB.
 
 ## Install
 
+### macOS
+
 ```bash
 mkdir -p ~/.claude/skills/cleanmymac
 curl -fsSL https://raw.githubusercontent.com/lucasrosati/cleanmymac/main/SKILL.md \
   -o ~/.claude/skills/cleanmymac/SKILL.md
 ```
 
-That's it. Claude Code picks up skills from `~/.claude/skills/` automatically.
+### Windows (PowerShell)
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills\cleanmypc" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/lucasrosati/cleanmymac/main/skillwindows.md" `
+  -OutFile "$env:USERPROFILE\.claude\skills\cleanmypc\SKILL.md"
+```
+
+Claude Code picks up skills from `~/.claude/skills/` (macOS) and `%USERPROFILE%\.claude\skills\` (Windows) automatically.
 
 ## Use
 
 Inside Claude Code:
 
 ```
-/cleanmymac
+/cleanmymac   # macOS
+/cleanmypc    # Windows
 ```
 
 Or just describe the problem naturally — the skill auto-triggers on phrases like:
 
 - "meu disco tá cheio"
-- "limpar caches do mac"
+- "limpar caches do mac" / "limpar o pc"
 - "investigar o que ocupa system data"
 - "que diabos tá ocupando esses 90 GB?"
-- Sharing a screenshot of macOS Storage Settings
+- Sharing a screenshot of macOS Storage Settings or Windows Storage Sense
 
 ## Catalog of villains it knows how to handle
+
+### macOS (`/cleanmymac`)
 
 - **Browsers** (Chromium-based: Comet, Arc, Chrome, Brave, Edge) — caches Service Worker, GPU, blob storage, while preserving logins/bookmarks/cookies/extensions
 - **iOS Simulators** — `xcrun simctl delete all` (canonical, cleans metadata)
@@ -59,16 +77,43 @@ Or just describe the problem naturally — the skill auto-triggers on phrases li
 - **Docker.raw** — guidance on shrinking VM image
 - **Full app uninstall** — 9-path pattern (`/Applications`, `Group Containers`, `Containers`, `Application Support`, `Caches`, `Preferences`, `WebKit`, `HTTPStorages`, `LaunchAgents`)
 
+### Windows (`/cleanmypc`)
+
+- **Browsers** (same Chromium structure under `%LOCALAPPDATA%\<vendor>\<browser>\User Data\`)
+- **Windows Update cache** — stop `wuauserv` → clear `SoftwareDistribution\Download`
+- **Component store** (`WinSxS`) — `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase`
+- **Hibernation file** — `powercfg /h off` (with warning about Fast Startup)
+- **Volume Shadow Copies** (System Restore) — `vssadmin delete shadows`
+- **`Windows.old`** — Storage Sense or `cleanmgr`
+- **WSL VHDX** — `wsl --shutdown` + `Optimize-VHD`
+- **Docker Desktop WSL2** — Settings → Resources → Disk image cleanup
+- **Visual Studio / NuGet / MSBuild** — DerivedData equivalents (`bin\`, `obj\`, `.vs\`, NuGet global packages)
+- **Steam / Epic / Battle.net** — shader caches, downloading folders (not the games)
+- **Temp folders** — `%TEMP%`, `C:\Windows\Temp`
+- **Memory dumps** — `C:\Windows\Minidump`, `MEMORY.DMP`
+- **Full app uninstall** — `winget uninstall` + `%LOCALAPPDATA%`, `%APPDATA%`, `%PROGRAMDATA%` leftover sweep
+
 ## What it WON'T touch
 
-Explicitly listed in the skill as **off-limits**:
+Explicitly listed in each skill as **off-limits**:
 
+**macOS:**
 - Browser dossiers: `Login Data`, `Bookmarks`, `Cookies`, `Web Data`, `Extensions`, `IndexedDB`, `Local Storage`, `Sessions`, `History`, `Favicons`
 - `~/Library/Keychains/` (passwords)
 - `~/Library/Mail/`
 - `~/Library/Mobile Documents/` (iCloud Drive synced files)
 - `~/Library/Biome/` (Siri/intelligence)
 - iCloud-synced data without you explicitly disabling sync first
+
+**Windows:**
+- Same browser dossiers (under `%LOCALAPPDATA%\<vendor>\<browser>\User Data\Default\`)
+- `C:\Windows\System32`, `C:\Windows\WinSxS` (manual deletion forbidden — use DISM)
+- `pagefile.sys` (configure via System Properties, never delete manually)
+- OneDrive / Google Drive / Dropbox sync folders
+- `steamapps\common` (installed games)
+- Registry edits without explicit confirmation + `reg export` backup
+
+**Both:**
 - Anything you mark as off-limits in Claude memory
 
 ## Personalize with absolute rules
@@ -108,7 +153,7 @@ After investigation, propose targeted deletions. After approval, run with progre
 [██████████████████████████████] 100% — Concluído em 132s | Disco livre: 53Gi
 ```
 
-## Real-world result
+## Real-world result (macOS dogfooding)
 
 First session: **17 GB Photos + 3.4 GB browser caches + 7 GB simulators + 1.5 GB Telegram + 4 GB iCloud caches + 3.6 GB Notes attachments = ~36 GB freed** in one negotiated pass, with zero data loss and full transparency about every action.
 
@@ -118,8 +163,18 @@ MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Found a villain not in the catalog? PRs welcome. Add it to the "Catálogo de vilões conhecidos" section in `SKILL.md` with:
+Found a villain not in the catalog? PRs welcome. Add it to the "Catálogo de vilões conhecidos" section in `SKILL.md` (macOS) or `skillwindows.md` (Windows) with:
 - Path
 - What it is
 - Whether it's safe to nuke (pure cache) or requires care (user data)
 - The deletion pattern
+
+## File layout
+
+```
+cleanmymac/
+├── SKILL.md           ← macOS skill (Bash)
+├── skillwindows.md    ← Windows skill (PowerShell)
+├── README.md
+└── LICENSE
+```
